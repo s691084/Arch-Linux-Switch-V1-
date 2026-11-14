@@ -1,0 +1,58 @@
+From 3e7e6f4c9cc1647ec76636fe86be4b10681d3acf Mon Sep 17 00:00:00 2001
+From: nx <nx@local>
+Date: Tue, 10 Nov 2026 09:49:15 -0600
+Subject: [PATCH 2/8] local: Tegra210 SC7 fixes (keep COP IRQ, Switchroot PMC
+ timings)
+
+---
+ .../arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts |  5 ++---
+ drivers/irqchip/irq-tegra.c                            | 10 ++++++++--
+ 2 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts b/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
+index 459d2e4ac..164bf526f 100644
+--- a/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
++++ b/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
+@@ -1901,9 +1901,8 @@ pmc@7000e400 {
+ 		nvidia,suspend-mode = <0>;
+ 		nvidia,cpu-pwr-good-time = <0>;
+ 		nvidia,cpu-pwr-off-time = <0>;
+-		nvidia,core-pwr-good-time = <4587 3876>;
+-		nvidia,core-pwr-off-time = <39065>;
+-		nvidia,core-power-req-active-high;
++		nvidia,core-pwr-good-time = <13100 7800>;
++		nvidia,core-pwr-off-time = <44160>;
+ 		nvidia,sys-clock-req-active-high;
+ 
+ 		/* These pads are on the 1.8 V rail, not the assumed 3.3 V. */
+diff --git a/drivers/irqchip/irq-tegra.c b/drivers/irqchip/irq-tegra.c
+index b449e9cc4..4eb6d7047 100644
+--- a/drivers/irqchip/irq-tegra.c
++++ b/drivers/irqchip/irq-tegra.c
+@@ -17,6 +17,7 @@
+ #include <linux/irq.h>
+ #include <linux/irqchip.h>
+ #include <linux/irqdomain.h>
++#include <linux/of.h>
+ #include <linux/of_address.h>
+ #include <linux/slab.h>
+ #include <linux/syscore_ops.h>
+@@ -147,8 +148,13 @@ static int tegra_ictlr_suspend(void *data)
+ 		lic->cop_ier[i] = readl_relaxed(ictlr + ICTLR_COP_IER);
+ 		lic->cop_iep[i] = readl_relaxed(ictlr + ICTLR_COP_IEP_CLASS);
+ 
+-		/* Disable COP interrupts */
+-		writel_relaxed(GENMASK(31, 0), ictlr + ICTLR_COP_IER_CLR);
++		/*
++		 * Disable COP interrupts, except on Tegra210: there bl31 runs the
++		 * SC7-Entry firmware on the COP (BPMP-Lite) to enter deep sleep,
++		 * and that firmware needs its interrupt.
++		 */
++		if (!of_machine_is_compatible("nvidia,tegra210"))
++			writel_relaxed(GENMASK(31, 0), ictlr + ICTLR_COP_IER_CLR);
+ 
+ 		/* Disable CPU interrupts */
+ 		writel_relaxed(GENMASK(31, 0), ictlr + ICTLR_CPU_IER_CLR);
+-- 
+2.55.0
+

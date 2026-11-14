@@ -1,0 +1,29 @@
+From faac036b56ab675da42ba8342bbd19c1e5fffaab Mon Sep 17 00:00:00 2001
+From: nx <nx@local>
+Date: Tue, 10 Nov 2026 10:32:31 -0600
+Subject: [PATCH 5/8] local: revert PMC timing/polarity experiment (broke
+ s2idle wake)
+
+---
+ arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts b/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
+index 164bf526f..459d2e4ac 100644
+--- a/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
++++ b/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
+@@ -1901,8 +1901,9 @@ pmc@7000e400 {
+ 		nvidia,suspend-mode = <0>;
+ 		nvidia,cpu-pwr-good-time = <0>;
+ 		nvidia,cpu-pwr-off-time = <0>;
+-		nvidia,core-pwr-good-time = <13100 7800>;
+-		nvidia,core-pwr-off-time = <44160>;
++		nvidia,core-pwr-good-time = <4587 3876>;
++		nvidia,core-pwr-off-time = <39065>;
++		nvidia,core-power-req-active-high;
+ 		nvidia,sys-clock-req-active-high;
+ 
+ 		/* These pads are on the 1.8 V rail, not the assumed 3.3 V. */
+-- 
+2.55.0
+

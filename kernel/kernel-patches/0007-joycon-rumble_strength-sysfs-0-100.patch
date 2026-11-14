@@ -1,0 +1,84 @@
+From 23d5297dafa0e1ac638a3f4aecafa821cef86003 Mon Sep 17 00:00:00 2001
+From: nx <nx@local>
+Date: Tue, 10 Nov 2026 11:37:32 -0600
+Subject: [PATCH 7/8] joycon: rumble_strength sysfs (0-100 %)
+
+---
+ drivers/input/joystick/joycon.c | 38 +++++++++++++++++++++++++++++++--
+ 1 file changed, 36 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/input/joystick/joycon.c b/drivers/input/joystick/joycon.c
+index 5f6dd3dfb..bf4ede9b5 100644
+--- a/drivers/input/joystick/joycon.c
++++ b/drivers/input/joystick/joycon.c
+@@ -320,6 +320,9 @@ struct joycon {
+ 	u8 home_led;
+ 	bool home_led_due;
+ 
++	/* Vibration strength in percent (0 = off), applied to every effect. */
++	u8 rumble_pct;
++
+ 	struct input_dev *input_dev;
+ 	struct input_dev *imu_dev;
+ 	struct power_supply *batt_dev;
+@@ -628,8 +631,9 @@ static int joycon_play_effect(struct input_dev *dev, void *data,
+ 			      struct ff_effect *effect)
+ {
+ 	struct joycon *joycon = input_get_drvdata(dev);
+-	u16 amp_l = effect->u.rumble.strong_magnitude;
+-	u16 amp_r = effect->u.rumble.weak_magnitude;
++	u32 pct = READ_ONCE(joycon->rumble_pct);
++	u16 amp_l = effect->u.rumble.strong_magnitude * pct / 100;
++	u16 amp_r = effect->u.rumble.weak_magnitude * pct / 100;
+ 	u8 encoded[JC_RUMBLE_DATA_SIZE];
+ 
+ 	if (effect->type != FF_RUMBLE)
+@@ -1750,6 +1754,7 @@ static int joycon_serdev_probe(struct serdev_device *serdev)
+ 	mutex_init(&joycon->lock);
+ 	mutex_init(&joycon->req_mutex);
+ 	spin_lock_init(&joycon->rumble_lock);
++	joycon->rumble_pct = 100;
+ 	init_completion(&joycon->req_done);
+ 	INIT_DELAYED_WORK(&joycon->work, joycon_work);
+ 	joycon_reset_ctlr_state(joycon);
+@@ -2009,8 +2014,37 @@ static ssize_t home_led_store(struct device *dev, struct device_attribute *attr,
+ }
+ static DEVICE_ATTR_RW(home_led);
+ 
++/* Vibration strength, 0 (off) to 100 percent of the driver maximum. */
++static ssize_t rumble_strength_show(struct device *dev,
++				    struct device_attribute *attr, char *buf)
++{
++	struct joycon *joycon = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%u\n", READ_ONCE(joycon->rumble_pct));
++}
++
++static ssize_t rumble_strength_store(struct device *dev,
++				     struct device_attribute *attr,
++				     const char *buf, size_t count)
++{
++	struct joycon *joycon = dev_get_drvdata(dev);
++	u8 val;
++	int err;
++
++	err = kstrtou8(buf, 0, &val);
++	if (err)
++		return err;
++	if (val > 100)
++		return -EINVAL;
++
++	WRITE_ONCE(joycon->rumble_pct, val);
++	return count;
++}
++static DEVICE_ATTR_RW(rumble_strength);
++
+ static struct attribute *joycon_attrs[] = {
+ 	&dev_attr_home_led.attr,
++	&dev_attr_rumble_strength.attr,
+ 	&dev_attr_pairing_host.attr,
+ 	&dev_attr_pairing_record.attr,
+ 	NULL,
+-- 
+2.55.0
+

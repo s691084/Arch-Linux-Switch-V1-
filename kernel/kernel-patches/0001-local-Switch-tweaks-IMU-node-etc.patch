@@ -1,0 +1,41 @@
+From b2a55b4ad1be2f862f2f11c95a901813e4d9b723 Mon Sep 17 00:00:00 2001
+From: nx <nx@local>
+Date: Tue, 10 Nov 2026 09:47:31 -0600
+Subject: [PATCH 1/8] local: Switch tweaks (IMU node etc.)
+
+---
+ .../dts/nvidia/tegra210-nintendo-switch.dts   | 21 +++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts b/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
+index 018ced70f..459d2e4ac 100644
+--- a/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
++++ b/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
+@@ -2523,3 +2523,24 @@ gpu_vreg_die_warn_temp_thresh: hot-die {
+ 		};
+ 	};
+ };
++
++/* Motion sensor (IMU) for auto-rotation - wiring from Switchroot's tegra210-nx-sensor.dtsi */
++/ {
++	spi@7000da00 {
++		status = "okay";
++
++		imu@0 {
++			compatible = "st,lsm6ds3h";
++			reg = <0>;
++			spi-max-frequency = <8000000>;
++			spi-cpha;
++			spi-cpol;
++			interrupt-parent = <&gpio>;
++			interrupts = <TEGRA_GPIO(X, 2) IRQ_TYPE_LEVEL_HIGH>;
++			st,drdy-int-pin = <2>;
++			mount-matrix = "0", "1", "0",
++				       "1", "0", "0",
++				       "0", "0", "-1";
++		};
++	};
++};
+-- 
+2.55.0
+

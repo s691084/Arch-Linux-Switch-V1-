@@ -1,0 +1,99 @@
+From a32a78f08d36622d231d393846167138ba272b16 Mon Sep 17 00:00:00 2001
+From: nx <nx@local>
+Date: Tue, 10 Nov 2026 11:47:39 -0600
+Subject: [PATCH 8/8] joycon: button_layout sysfs (xbox/nintendo)
+
+---
+ drivers/input/joystick/joycon.c | 52 ++++++++++++++++++++++++++++++++-
+ 1 file changed, 51 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/input/joystick/joycon.c b/drivers/input/joystick/joycon.c
+index bf4ede9b5..21e92f03b 100644
+--- a/drivers/input/joystick/joycon.c
++++ b/drivers/input/joystick/joycon.c
+@@ -323,6 +323,9 @@ struct joycon {
+ 	/* Vibration strength in percent (0 = off), applied to every effect. */
+ 	u8 rumble_pct;
+ 
++	/* Face buttons by label (A = BTN_SOUTH) instead of by position. */
++	bool nintendo_layout;
++
+ 	struct input_dev *input_dev;
+ 	struct input_dev *imu_dev;
+ 	struct power_supply *batt_dev;
+@@ -626,6 +629,25 @@ static int joycon_battery_property_is_writeable(struct power_supply *psy,
+ 	return psp == POWER_SUPPLY_PROP_CHARGE_BEHAVIOUR;
+ }
+ 
++/*
++ * The shared maps place the face buttons by position (bottom = BTN_SOUTH).
++ * The Nintendo layout goes by the printed letters: A, on the right, becomes
++ * BTN_SOUTH, so games' "A" is the Joy-Con's A.
++ */
++static unsigned int joycon_layout_code(const struct joycon *joycon,
++				       unsigned int code)
++{
++	if (!READ_ONCE(joycon->nintendo_layout))
++		return code;
++	switch (code) {
++	case BTN_SOUTH:	return BTN_EAST;
++	case BTN_EAST:	return BTN_SOUTH;
++	case BTN_NORTH:	return BTN_WEST;
++	case BTN_WEST:	return BTN_NORTH;
++	}
++	return code;
++}
++
+ /* Called from the force feedback timer, so it only stages the bytes. */
+ static int joycon_play_effect(struct input_dev *dev, void *data,
+ 			      struct ff_effect *effect)
+@@ -1492,7 +1514,8 @@ static void joycon_report_input(struct joycon *joycon, const u8 *report,
+ 	raw = report[3] | report[4] << 8 | report[5] << 16;
+ 
+ 	for (btn = joycon->info->btn_map; btn->code; btn++)
+-		input_report_key(idev, btn->code, !!(raw & btn->bit));
++		input_report_key(idev, joycon_layout_code(joycon, btn->code),
++				 !!(raw & btn->bit));
+ 	for (btn = joycon->info->btn_map_s; btn->code; btn++)
+ 		input_report_key(idev, btn->code, !!(raw & btn->bit));
+ 
+@@ -2042,9 +2065,36 @@ static ssize_t rumble_strength_store(struct device *dev,
+ }
+ static DEVICE_ATTR_RW(rumble_strength);
+ 
++/* Face button layout: "xbox" (by position, the default) or "nintendo". */
++static ssize_t button_layout_show(struct device *dev,
++				  struct device_attribute *attr, char *buf)
++{
++	struct joycon *joycon = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%s\n", READ_ONCE(joycon->nintendo_layout) ?
++			  "nintendo" : "xbox");
++}
++
++static ssize_t button_layout_store(struct device *dev,
++				   struct device_attribute *attr,
++				   const char *buf, size_t count)
++{
++	struct joycon *joycon = dev_get_drvdata(dev);
++
++	if (sysfs_streq(buf, "nintendo"))
++		WRITE_ONCE(joycon->nintendo_layout, true);
++	else if (sysfs_streq(buf, "xbox"))
++		WRITE_ONCE(joycon->nintendo_layout, false);
++	else
++		return -EINVAL;
++	return count;
++}
++static DEVICE_ATTR_RW(button_layout);
++
+ static struct attribute *joycon_attrs[] = {
+ 	&dev_attr_home_led.attr,
+ 	&dev_attr_rumble_strength.attr,
++	&dev_attr_button_layout.attr,
+ 	&dev_attr_pairing_host.attr,
+ 	&dev_attr_pairing_record.attr,
+ 	NULL,
+-- 
+2.55.0
+

@@ -1,0 +1,53 @@
+From 9da6ca206f5aadf58c70b234b566c8ed621c1e76 Mon Sep 17 00:00:00 2001
+From: nx <nx@local>
+Date: Tue, 10 Nov 2026 10:02:00 -0600
+Subject: [PATCH 3/8] local: MAX77620 FPS timings + gpio1 as on Switchroot
+
+---
+ .../boot/dts/nvidia/tegra210-nintendo-switch.dts      | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts b/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
+index 164bf526f..125df7009 100644
+--- a/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
++++ b/arch/arm64/boot/dts/nvidia/tegra210-nintendo-switch.dts
+@@ -1597,11 +1597,7 @@ pin_gpio0 {
+ 
+ 				pin_gpio1 {
+ 					pins = "gpio1";
+-					function = "fps-out";
+-					drive-push-pull = <1>;
+-					maxim,active-fps-source = <MAX77620_FPS_SRC_0>;
+-					maxim,active-fps-power-up-slot = <7>;
+-					maxim,active-fps-power-down-slot = <0>;
++					function = "gpio";
+ 				};
+ 
+ 				pin_gpio2 {
+@@ -1634,21 +1630,20 @@ pin_gpio5_6_7 {
+ 
+ 			fps {
+ 				fps0 {
++					maxim,shutdown-fps-time-period-us = <5120>;
+ 					maxim,fps-event-source = <MAX77620_FPS_EVENT_SRC_EN0>;
+-					maxim,suspend-fps-time-period-us = <5120>;
+ 				};
+ 
+ 				fps1 {
+ 					maxim,fps-event-source = <MAX77620_FPS_EVENT_SRC_EN1>;
+ 					maxim,shutdown-fps-time-period-us = <5120>;
+-					maxim,suspend-fps-time-period-us = <640>;
+ 					maxim,device-state-on-disabled-event =
+ 						<MAX77620_FPS_INACTIVE_STATE_SLEEP>;
+ 				};
+ 
+ 				fps2 {
++					maxim,shutdown-fps-time-period-us = <5120>;
+ 					maxim,fps-event-source = <MAX77620_FPS_EVENT_SRC_EN0>;
+-					maxim,suspend-fps-time-period-us = <5120>;
+ 				};
+ 			};
+ 
+-- 
+2.55.0
+

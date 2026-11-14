@@ -1,0 +1,128 @@
+From 99a9d0dc5be31593f7e703b667080e407445c238 Mon Sep 17 00:00:00 2001
+From: nx <nx@local>
+Date: Tue, 10 Nov 2026 10:58:47 -0600
+Subject: [PATCH 6/8] joycon: Home button LED (subcommand 0x38) via home_led
+ sysfs
+
+---
+ drivers/input/joystick/joycon.c | 61 +++++++++++++++++++++++++++++++++
+ 1 file changed, 61 insertions(+)
+
+diff --git a/drivers/input/joystick/joycon.c b/drivers/input/joystick/joycon.c
+index 6079a295e..5f6dd3dfb 100644
+--- a/drivers/input/joystick/joycon.c
++++ b/drivers/input/joystick/joycon.c
+@@ -60,6 +60,7 @@
+ #define JOYCON_HID_ENABLE_VIBRATION (0x48)
+ #define JOYCON_HID_GET_REGVOLT (0x50)
+ #define JOYCON_HID_SET_CHARGE (0x51)
++#define JOYCON_HID_SET_HOME_LIGHT (0x38)
+ 
+ /* Bit 7 of the byte ahead of the echoed subcommand; clear on a refusal. */
+ #define JOYCON_SUBCMD_ACK	BIT(7)
+@@ -315,6 +316,10 @@ struct joycon {
+ 	bool charge_reg_on;
+ 	bool charge_acked;
+ 
++	/* Home button ring, 0-15, kept across reconnects; sent while due. */
++	u8 home_led;
++	bool home_led_due;
++
+ 	struct input_dev *input_dev;
+ 	struct input_dev *imu_dev;
+ 	struct power_supply *batt_dev;
+@@ -736,6 +741,7 @@ static void joycon_reset_ctlr_state(struct joycon *joycon)
+ 	joycon->vib_enabled = false;
+ 	joycon->imu_enabled = false;
+ 	joycon->regvolt_due = false;
++	joycon->home_led_due = joycon->home_led != 0;
+ 	memset(joycon->cal_parsed, 0, sizeof(joycon->cal_parsed));
+ 	/* Until the flash has been read; the raw readings are unusable without. */
+ 	joycon_stick_cal_defaults(&joycon->left_cal_x, &joycon->left_cal_y);
+@@ -1000,6 +1006,23 @@ static u8 joycon_next_subcmd(struct joycon *joycon, u8 *args, size_t *len)
+ 		return JOYCON_HID_SET_CHARGE;
+ 	}
+ 
++	/* Only the right half has a Home button ring. */
++	if (joycon->home_led_due) {
++		u8 b = joycon->home_led & 0xF;
++
++		if (joycon->info->left) {
++			joycon->home_led_due = false;
++		} else {
++			/* As hid-nintendo: one mini cycle, constant brightness, forever. */
++			args[(*len)++] = 0x01;
++			args[(*len)++] = b << 4;
++			args[(*len)++] = b | (b << 4);
++			args[(*len)++] = 0x11;
++			args[(*len)++] = 0x11;
++			return JOYCON_HID_SET_HOME_LIGHT;
++		}
++	}
++
+ 	for (i = 0; i < JOYCON_CAL_STEPS; i++) {
+ 		if (joycon->cal_parsed[i])
+ 			continue;
+@@ -1406,6 +1429,9 @@ static void joycon_subcmd_reply(struct joycon *joycon, u8 ack, u8 subcmd,
+ 	case JOYCON_HID_SET_CHARGE:
+ 		joycon->charge_acked = true;
+ 		break;
++	case JOYCON_HID_SET_HOME_LIGHT:
++		joycon->home_led_due = false;
++		break;
+ 	case JOYCON_HID_GET_REGVOLT:
+ 		if (len < 2)
+ 			break;
+@@ -1832,6 +1858,7 @@ static int joycon_resume(struct device *dev)
+ 		joycon->init_step = 0;
+ 		joycon->init_sent = false;
+ 		joycon->pending = 0;
++		joycon->home_led_due = joycon->home_led != 0;
+ 		joycon->running = true;
+ 	}
+ 	queue_delayed_work(joycon->wq, &joycon->work, 0);
+@@ -1949,7 +1976,41 @@ static ssize_t pairing_record_show(struct device *dev,
+ }
+ static DEVICE_ATTR_ADMIN_RO(pairing_record);
+ 
++/* Home button ring brightness, 0 (off) to 15; ignored by a left Joy-Con. */
++static ssize_t home_led_show(struct device *dev, struct device_attribute *attr,
++			     char *buf)
++{
++	struct joycon *joycon = dev_get_drvdata(dev);
++
++	guard(mutex)(&joycon->lock);
++	return sysfs_emit(buf, "%u\n", joycon->home_led);
++}
++
++static ssize_t home_led_store(struct device *dev, struct device_attribute *attr,
++			      const char *buf, size_t count)
++{
++	struct joycon *joycon = dev_get_drvdata(dev);
++	u8 val;
++	int err;
++
++	err = kstrtou8(buf, 0, &val);
++	if (err)
++		return err;
++	if (val > 15)
++		return -EINVAL;
++
++	scoped_guard(mutex, &joycon->lock) {
++		joycon->home_led = val;
++		/* Sent with the next poll; a fresh controller gets it after setup. */
++		joycon->home_led_due = true;
++	}
++
++	return count;
++}
++static DEVICE_ATTR_RW(home_led);
++
+ static struct attribute *joycon_attrs[] = {
++	&dev_attr_home_led.attr,
+ 	&dev_attr_pairing_host.attr,
+ 	&dev_attr_pairing_record.attr,
+ 	NULL,
+-- 
+2.55.0
+
